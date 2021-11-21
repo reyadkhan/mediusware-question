@@ -2,14 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ProductRequest;
 use App\Models\Product;
-use App\Models\ProductVariant;
-use App\Models\ProductVariantPrice;
 use App\Models\Variant;
-use Illuminate\Http\Request;
+use App\Repositories\ProductRepository;
+use App\Repositories\VariantRepository;
 
 class ProductController extends Controller
 {
+    private $repository;
+
+    private const PAGE_SIZE = 5;
+
+    public function __construct(ProductRepository $repository)
+    {
+        $this->repository = $repository;
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -17,7 +26,24 @@ class ProductController extends Controller
      */
     public function index()
     {
-        return view('products.index');
+        if( ! empty($filters = request()->all())) {
+            request()->validate($this->filterDataRules());
+            $products = $this->repository->paginateWithFilter($filters, self::PAGE_SIZE);
+        } else {
+            $products = $this->repository->paginate(self::PAGE_SIZE);
+        }
+        return view('products.index', compact('products'));
+    }
+
+    private function filterDataRules(): array
+    {
+        return [
+            'title' => 'nullable|string',
+            'date' => 'nullable|date|date_format:Y-m-d',
+            'price_from' => 'nullable|numeric',
+            'price_to' => 'nullable|numeric',
+            'variant' => 'nullable|string'
+        ];
     }
 
     /**
@@ -37,9 +63,14 @@ class ProductController extends Controller
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function store(Request $request)
+    public function store(ProductRequest $request)
     {
+        $product = $this->repository->create($request->validated());
 
+        if($request->expectsJson()) {
+            return response()->json(compact('product'));
+        }
+        return redirect()->route('product.index');
     }
 
 
@@ -60,22 +91,28 @@ class ProductController extends Controller
      * @param \App\Models\Product $product
      * @return \Illuminate\Http\Response
      */
-    public function edit(Product $product)
+    public function edit(VariantRepository $variantRepo, Product $product)
     {
-        $variants = Variant::all();
-        return view('products.edit', compact('variants'));
+        $variants = $variantRepo->getAllWithProductVariantByProductId($product->id);
+        $product->load(['prices', 'images']);
+        return view('products.edit', compact('variants', 'product'));
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param ProductRequest $request
      * @param \App\Models\Product $product
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, Product $product)
+    public function update(ProductRequest $request, Product $product)
     {
-        //
+        $updatedProduct = $this->repository->update($product, $request->validated());
+
+        if($request->expectsJson()) {
+            return response()->json($updatedProduct);
+        }
+        return redirect()->route('product.index');
     }
 
     /**
