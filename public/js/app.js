@@ -2012,6 +2012,14 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
 
 
 
@@ -2024,6 +2032,10 @@ __webpack_require__.r(__webpack_exports__);
     variants: {
       type: Array,
       required: true
+    },
+    product: {
+      type: Object,
+      required: false
     }
   },
   data: function data() {
@@ -2038,11 +2050,11 @@ __webpack_require__.r(__webpack_exports__);
       }],
       product_variant_prices: [],
       dropzoneOptions: {
-        url: 'https://httpbin.org/post',
+        url: '/images/upload',
         thumbnailWidth: 150,
         maxFilesize: 0.5,
         headers: {
-          "My-Awesome-Header": "header value"
+          "X-CSRF-TOKEN": $('meta[name=csrf-token]').attr('content')
         }
       }
     };
@@ -2060,12 +2072,19 @@ __webpack_require__.r(__webpack_exports__);
         return !selected_variants.some(function (entry2) {
           return entry1 == entry2;
         });
-      }); // console.log(available_variants)
-
+      });
       this.product_variant.push({
         option: available_variants[0],
         tags: []
       });
+    },
+    setImage: function setImage(file, res) {
+      this.images.push({
+        file_path: res.path
+      });
+    },
+    removeImage: function removeImage(index) {
+      this.images.splice(index, 1);
     },
     // check the variant and render all the combination
     checkVariant: function checkVariant() {
@@ -2108,16 +2127,86 @@ __webpack_require__.r(__webpack_exports__);
         product_variant: this.product_variant,
         product_variant_prices: this.product_variant_prices
       };
-      axios.post('/product', product).then(function (response) {
-        console.log(response.data);
-      })["catch"](function (error) {
-        console.log(error);
-      });
+
+      if (this.product) {
+        axios.put('/product/' + this.product.id, product).then(function (response) {
+          console.log(response.data);
+        })["catch"](function (error) {
+          console.log(error);
+        });
+      } else {
+        axios.post('/product', product).then(function (response) {
+          console.log(response.data);
+        })["catch"](function (error) {
+          console.log(error);
+        });
+      }
+
       console.log(product);
+    },
+    getTagValues: function getTagValues(tags) {
+      var values = [];
+      tags.forEach(function (tag) {
+        if (tag.hasOwnProperty('variant')) {
+          values.push(tag.variant);
+        }
+      });
+      return values;
     }
   },
   mounted: function mounted() {
-    console.log('Component mounted.');
+    var _this2 = this;
+
+    if (this.product) {
+      this.product_name = this.product.title;
+      this.product_sku = this.product.sku;
+      this.description = this.product.description;
+      var productVariants = [];
+      this.variants.forEach(function (variant) {
+        var newVar = {
+          option: variant.id,
+          tags: []
+        };
+        variant.product_variants.forEach(function (pv) {
+          return newVar.tags.push(pv.variant);
+        });
+        productVariants.push(newVar);
+      });
+      this.product_variant = productVariants;
+
+      if (this.product.hasOwnProperty('prices')) {
+        this.product.prices.forEach(function (price) {
+          var title = '';
+
+          if (price.variant_one) {
+            title += price.variant_one.variant + '/';
+          }
+
+          if (price.variant_two) {
+            title += price.variant_two.variant + '/';
+          }
+
+          if (price.variant_three) {
+            title += price.variant_three.variant;
+          }
+
+          _this2.product_variant_prices.push({
+            title: title,
+            price: price.price,
+            stock: price.stock
+          });
+        });
+      }
+
+      if (this.product.images) {
+        this.product.images.forEach(function (image) {
+          return _this2.images.push({
+            file_path: image.file_path
+          });
+        });
+        console.log(this.images);
+      }
+    }
   }
 });
 
@@ -50564,9 +50653,58 @@ var render = function() {
             "div",
             { staticClass: "card-body border" },
             [
+              _c(
+                "div",
+                {
+                  directives: [
+                    {
+                      name: "show",
+                      rawName: "v-show",
+                      value: _vm.images.length > 0,
+                      expression: "images.length > 0"
+                    }
+                  ],
+                  staticClass: "my-2"
+                },
+                [
+                  _c(
+                    "div",
+                    { staticClass: "d-flex" },
+                    _vm._l(_vm.images, function(image, index) {
+                      return _c(
+                        "div",
+                        { key: index, staticClass: "border rounded" },
+                        [
+                          _c("img", {
+                            attrs: {
+                              src: "/storage/" + image.file_path,
+                              alt: "product image",
+                              width: "150"
+                            }
+                          }),
+                          _vm._v(" "),
+                          _c("p", { staticClass: "text-right mb-0 p-1" }, [
+                            _c("span", {
+                              staticClass: "fa fa-trash btn btn-secondary",
+                              on: {
+                                click: function($event) {
+                                  return _vm.removeImage(index)
+                                }
+                              }
+                            })
+                          ])
+                        ]
+                      )
+                    }),
+                    0
+                  )
+                ]
+              ),
+              _vm._v(" "),
               _c("vue-dropzone", {
                 ref: "myVueDropzone",
-                attrs: { id: "dropzone", options: _vm.dropzoneOptions }
+                attrs: { id: "dropzone", options: _vm.dropzoneOptions },
+                on: { "vdropzone-success": _vm.setImage }
               })
             ],
             1
@@ -50785,8 +50923,11 @@ var render = function() {
     ),
     _vm._v(" "),
     _c(
-      "button",
-      { staticClass: "btn btn-secondary btn-lg", attrs: { type: "button" } },
+      "a",
+      {
+        staticClass: "btn btn-secondary btn-lg",
+        attrs: { type: "button", href: "/product" }
+      },
       [_vm._v("Cancel")]
     )
   ])
@@ -63300,8 +63441,8 @@ __webpack_require__.r(__webpack_exports__);
 /*! no static exports found */
 /***/ (function(module, exports, __webpack_require__) {
 
-__webpack_require__(/*! /home/rifat/Programming/mediusware/interview/interview-question-sr/resources/js/app.js */"./resources/js/app.js");
-module.exports = __webpack_require__(/*! /home/rifat/Programming/mediusware/interview/interview-question-sr/resources/sass/app.scss */"./resources/sass/app.scss");
+__webpack_require__(/*! H:\assignments\mediusware-question\resources\js\app.js */"./resources/js/app.js");
+module.exports = __webpack_require__(/*! H:\assignments\mediusware-question\resources\sass\app.scss */"./resources/sass/app.scss");
 
 
 /***/ })

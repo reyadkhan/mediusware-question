@@ -24,7 +24,15 @@
                         <h6 class="m-0 font-weight-bold text-primary">Media</h6>
                     </div>
                     <div class="card-body border">
-                        <vue-dropzone ref="myVueDropzone" id="dropzone" :options="dropzoneOptions"></vue-dropzone>
+                        <div class="my-2" v-show="images.length > 0">
+                            <div class="d-flex">
+                                <div class="border rounded" v-for="(image, index) in images" :key="index">
+                                    <img :src="'/storage/' + image.file_path" alt="product image" width="150">
+                                    <p class="text-right mb-0 p-1"><span class="fa fa-trash btn btn-secondary" @click="removeImage(index)"></span></p>
+                                </div>
+                            </div>
+                        </div>
+                        <vue-dropzone ref="myVueDropzone" id="dropzone" :options="dropzoneOptions" @vdropzone-success="setImage"></vue-dropzone>
                     </div>
                 </div>
             </div>
@@ -92,7 +100,7 @@
         </div>
 
         <button @click="saveProduct" type="submit" class="btn btn-lg btn-primary">Save</button>
-        <button type="button" class="btn btn-secondary btn-lg">Cancel</button>
+        <a type="button" class="btn btn-secondary btn-lg" href="/product">Cancel</a>
     </section>
 </template>
 
@@ -110,6 +118,10 @@ export default {
         variants: {
             type: Array,
             required: true
+        },
+        product: {
+            type: Object,
+            required: false
         }
     },
     data() {
@@ -126,10 +138,10 @@ export default {
             ],
             product_variant_prices: [],
             dropzoneOptions: {
-                url: 'https://httpbin.org/post',
+                url: '/images/upload',
                 thumbnailWidth: 150,
                 maxFilesize: 0.5,
-                headers: {"My-Awesome-Header": "header value"}
+                headers: {"X-CSRF-TOKEN": $('meta[name=csrf-token]').attr('content')}
             }
         }
     },
@@ -139,12 +151,21 @@ export default {
             let all_variants = this.variants.map(el => el.id)
             let selected_variants = this.product_variant.map(el => el.option);
             let available_variants = all_variants.filter(entry1 => !selected_variants.some(entry2 => entry1 == entry2))
-            // console.log(available_variants)
 
             this.product_variant.push({
                 option: available_variants[0],
                 tags: []
             })
+        },
+
+        setImage(file, res) {
+            this.images.push({
+                file_path: res.path
+            })
+        },
+
+        removeImage(index) {
+            this.images.splice(index, 1);
         },
 
         // check the variant and render all the combination
@@ -188,20 +209,73 @@ export default {
                 product_variant_prices: this.product_variant_prices
             }
 
-
-            axios.post('/product', product).then(response => {
-                console.log(response.data);
-            }).catch(error => {
-                console.log(error);
-            })
-
+            if(this.product) {
+                axios.put('/product/' + this.product.id, product).then(response => {
+                    console.log(response.data);
+                }).catch(error => {
+                    console.log(error);
+                })
+            } else {
+                axios.post('/product', product).then(response => {
+                    console.log(response.data);
+                }).catch(error => {
+                    console.log(error);
+                })
+            }
             console.log(product);
+        },
+        getTagValues(tags) {
+            const values = [];
+            tags.forEach(tag => {
+                if(tag.hasOwnProperty('variant')) {
+                    values.push(tag.variant)
+                }
+            })
+            return values;
         }
-
-
     },
     mounted() {
-        console.log('Component mounted.')
+        if(this.product) {
+            this.product_name = this.product.title;
+            this.product_sku = this.product.sku;
+            this.description = this.product.description;
+            const productVariants = [];
+
+            this.variants.forEach(variant => {
+                const newVar = {
+                    option: variant.id,
+                    tags: []
+                }
+
+                variant.product_variants.forEach(pv => newVar.tags.push(pv.variant))
+                productVariants.push(newVar);
+            });
+            this.product_variant = productVariants;
+
+            if(this.product.hasOwnProperty('prices')) {
+                this.product.prices.forEach(price => {
+                    let title = '';
+                    if(price.variant_one) {
+                        title += price.variant_one.variant + '/'
+                    }
+                    if(price.variant_two) {
+                        title += price.variant_two.variant + '/'
+                    }
+                    if(price.variant_three) {
+                        title += price.variant_three.variant
+                    }
+                    this.product_variant_prices.push({
+                        title: title ,
+                        price: price.price,
+                        stock: price.stock
+                    })
+                })
+            }
+            if(this.product.images) {
+                this.product.images.forEach(image => this.images.push({file_path: image.file_path}));
+                console.log(this.images);
+            }
+        }
     }
 }
 </script>
